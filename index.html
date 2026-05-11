@@ -3,259 +3,373 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EchoTracker V3.9 - With History</title>
+    <title>EchoTracker - V3.1</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     
     <style>
         :root {
-            --primary: #2e7d32; --accent: #43a047; --bg: #f8f9fa;
-            --white: #ffffff; --text-dark: #212121; --text-light: #757575;
-            --shadow: 0 4px 12px rgba(0,0,0,0.08); --gold: #fbc02d;
+            --primary: #2e7d32;
+            --accent: #43a047;
+            --bg: #f8f9fa;
+            --white: #ffffff;
+            --text-dark: #212121;
+            --text-light: #757575;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+            --gold: #fbc02d;
         }
 
         * { box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; color: var(--text-dark); }
-        .container-wrapper { max-width: 500px; margin: 0 auto; min-height: 100vh; position: relative; background: var(--bg); }
 
-        /* --- AUTH --- */
-        #auth-container { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%); }
+        body { 
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            background-color: var(--bg); 
+            margin: 0; 
+            color: var(--text-dark); 
+            overflow-x: hidden; 
+        }
+
+        .container-wrapper {
+            max-width: 500px;
+            margin: 0 auto;
+            min-height: 100vh;
+            position: relative;
+            background: var(--bg);
+        }
+
+        /* --- AUTH UI --- */
+        #auth-container { 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%); 
+        }
         .auth-card { background: var(--white); padding: 25px; border-radius: 24px; box-shadow: var(--shadow); }
         .auth-tabs { display: flex; margin-bottom: 20px; background: #f0f0f0; padding: 5px; border-radius: 12px; }
-        .tab { flex: 1; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer; color: #777; font-size: 0.9em; }
+        .tab { flex: 1; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer; color: #777; transition: 0.3s; font-size: 0.9em; }
         .tab.active { background: white; color: var(--primary); font-weight: bold; box-shadow: var(--shadow); }
+
         input { width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; }
 
-        /* --- MAIN APP --- */
+        /* --- APP MAIN UI --- */
         #app-container { display: none; padding-bottom: 100px; }
-        .app-header { background: var(--white); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 100; }
-        .wallet-card { background: linear-gradient(135deg, var(--primary), var(--accent)); margin: 15px; padding: 20px; border-radius: 20px; color: white; box-shadow: 0 8px 16px rgba(46,125,50,0.2); }
+        .app-header { background: var(--white); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #eee; }
         
-        /* --- SCANNER --- */
-        .scan-window { position: relative; width: 100%; height: 230px; background: #000; border-radius: 24px; overflow: hidden; border: 4px solid var(--white); }
-        #webcam { width: 100%; height: 100%; object-fit: cover; }
-        .scan-line { position: absolute; width: 100%; height: 3px; background: #00ff00; top: 0; animation: scanning 2s infinite linear; box-shadow: 0 0 15px #00ff00; }
-        @keyframes scanning { 0% { top: 0%; } 100% { top: 100%; } }
+        .wallet-card { 
+            background: linear-gradient(135deg, var(--primary), var(--accent)); 
+            margin: 15px; padding: 20px; border-radius: 20px; color: white; 
+            box-shadow: 0 8px 16px rgba(46, 125, 50, 0.2); 
+        }
+        
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 15px; }
+        .stat-card { background: var(--white); padding: 15px; border-radius: 16px; text-align: center; box-shadow: var(--shadow); }
+        .stat-card span { font-size: 1.4em; font-weight: 800; color: var(--primary); display: block; }
 
-        /* --- TABLES & LISTS --- */
-        .history-table { width: 100%; border-collapse: collapse; background: white; border-radius: 15px; overflow: hidden; }
-        .history-table td { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.85em; }
-
-        /* --- SPIN OVERLAY --- */
-        #game-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 20px; }
-        #wheel { width: 240px; height: 240px; border-radius: 50%; border: 5px solid white; margin: 15px 0; transition: transform 4s cubic-bezier(0.1, 0.7, 0.1, 1); background: conic-gradient(#e53935 0deg 45deg, #fbc02d 45deg 90deg, #4caf50 90deg 135deg, #0277bd 135deg 180deg, #8e24aa 180deg 225deg, #fb8c00 225deg 270deg, #9e9e9e 270deg 315deg, #f06292 315deg 360deg); }
-        .prize-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 320px; margin-top: 15px; background: rgba(255,255,255,0.1); padding: 12px; border-radius: 15px; font-size: 0.75em; }
-        .p-item { display: flex; align-items: center; gap: 6px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; }
-
-        /* --- NAV --- */
-        .btn { border: none; padding: 15px; border-radius: 14px; cursor: pointer; width: 100%; font-size: 1em; font-weight: bold; margin: 10px 0; }
+        .action-section { padding: 15px; }
+        .ai-box { background: var(--white); border-radius: 20px; padding: 20px; text-align: center; box-shadow: var(--shadow); border: 2px dashed #c8e6c9; }
+        .btn { border: none; padding: 15px; border-radius: 14px; cursor: pointer; width: 100%; font-size: 1em; font-weight: 600; margin: 10px 0; transition: 0.2s; }
+        .btn:active { transform: scale(0.98); }
         .btn-primary { background: var(--primary); color: white; }
-        .bottom-nav { position: fixed; bottom: 0; width: 100%; max-width: 500px; background: white; display: flex; padding: 10px 0 25px 0; border-top: 1px solid #eee; }
-        .nav-item { flex: 1; text-align: center; font-size: 0.75em; color: var(--text-light); cursor: pointer; }
+        
+        #preview { width: 100%; border-radius: 12px; margin: 10px 0; display: none; max-height: 200px; object-fit: cover; }
+
+        /* --- GAME OVERLAY --- */
+        #game-overlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; 
+            align-items: center; justify-content: center; color: white; padding: 20px; 
+        }
+
+        /* List Hadiah */
+        .prize-list {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; 
+            background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px;
+            margin-bottom: 20px; width: 100%; max-width: 300px; font-size: 0.8em;
+        }
+        .prize-item { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+
+        #wheel { 
+            width: 260px; height: 260px; border-radius: 50%; border: 5px solid white; margin: 20px 0;
+            transition: transform 4s cubic-bezier(0.1, 0.7, 0.1, 1);
+            /* 8 Bagian Warna */
+            background: conic-gradient(
+                #e53935 0deg 45deg, #fbc02d 45deg 90deg, 
+                #4caf50 90deg 135deg, #0277bd 135deg 180deg, 
+                #8e24aa 180deg 225deg, #fb8c00 225deg 270deg,
+                #9e9e9e 270deg 315deg, #f06292 315deg 360deg
+            );
+        }
+
+        /* Navigation */
+        .bottom-nav { 
+            position: fixed; bottom: 0; width: 100%; max-width: 500px; 
+            background: var(--white); display: flex; justify-content: space-around; 
+            padding: 10px 0 25px 0; border-top: 1px solid #eee; z-index: 100; 
+        }
+        .nav-item { text-align: center; font-size: 0.75em; color: var(--text-light); cursor: pointer; flex: 1; }
         .nav-item.active { color: var(--primary); font-weight: bold; }
+
+        .history-table { width: 100%; background: white; border-radius: 15px; border-collapse: collapse; }
+        .history-table td { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
 <div class="container-wrapper">
     <div id="auth-container">
-        <h1 style="text-align:center; color:var(--primary);">EchoTracker</h1>
+        <div style="text-align:center; margin-bottom: 30px;">
+            <h1 style="color:var(--primary); margin:0; font-size: 2.2em;">EchoTracker</h1>
+            <p style="color:var(--text-light); margin:5px 0;">Daur Ulang Jadi Rupiah</p>
+        </div>
         <div class="auth-card">
             <div class="auth-tabs">
-                <div class="tab active" id="t-login" onclick="switchAuth('login')">Masuk</div>
-                <div class="tab" id="t-reg" onclick="switchAuth('register')">Daftar</div>
+                <div class="tab active" onclick="switchAuth('login')">Masuk</div>
+                <div class="tab" onclick="switchAuth('register')">Daftar</div>
             </div>
-            <input type="text" id="u-input" placeholder="Username">
-            <input type="password" id="p-input" placeholder="Password">
-            <button class="btn btn-primary" onclick="handleAuth()">MASUK / DAFTAR</button>
+            <div id="login-form">
+                <input type="text" id="login-user" placeholder="Username">
+                <input type="password" id="login-pass" placeholder="Password">
+                <button class="btn btn-primary" onclick="login()">Masuk</button>
+            </div>
+            <div id="register-form" style="display:none">
+                <input type="text" id="reg-user" placeholder="Username Baru">
+                <input type="password" id="reg-pass" placeholder="Password Baru">
+                <button class="btn btn-primary" onclick="register()">Daftar Akun</button>
+            </div>
         </div>
     </div>
 
     <div id="app-container">
         <div class="app-header">
             <b>Halo, <span id="display-name" style="color:var(--primary)"></span></b>
-            <small onclick="location.reload()" style="color:red; cursor:pointer; font-weight:bold;">Log Out</small>
+            <small onclick="location.reload()" style="color:red; font-weight: bold; cursor:pointer;">Keluar</small>
         </div>
 
         <div id="page-home">
             <div class="wallet-card">
-                <small>Saldo Rupiah</small>
+                <small>Saldo Dompet</small>
                 <div style="font-size:1.8em; font-weight:800;" id="stat-money">Rp 0</div>
-                <div style="display:flex; justify-content: space-between; margin: 10px 0;">
-                    <small>Koin: <b id="stat-coins">0</b></small>
-                    <small>Total Botol: <b id="stat-total">0</b></small>
-                </div>
-                <button onclick="convertCoins()" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:10px; border-radius:10px; width:100%; cursor:pointer; font-weight:bold;">TUKAR KOIN</button>
+                <p style="font-size: 0.7em; margin: 5px 0 15px 0; opacity: 0.9;">*1 Koin = Rp 20</p>
+                <button onclick="convertCoins()" style="background:rgba(255,255,255,0.25); border:1px solid white; color:white; padding:10px; border-radius:10px; width:100%; cursor:pointer; font-weight:bold;">Tukarkan Koin</button>
             </div>
             
-            <div style="padding: 15px;">
-                <div style="text-align:center; margin-bottom:10px;"><b id="ai-msg" style="color:var(--primary)">Menyiapkan Kamera...</b></div>
-                <div class="scan-window">
-                    <video id="webcam" autoplay playsinline muted></video>
-                    <div class="scan-line"></div>
+            <div class="stats-grid">
+                <div class="stat-card"><small>Koin</small><span id="stat-coins">0</span></div>
+                <div class="stat-card"><small>Total Botol</small><span id="stat-total">0</span></div>
+            </div>
+            
+            <div class="action-section">
+                <div class="ai-box">
+                    <b style="font-size: 1.1em;">Cek Botol Plastik</b>
+                    <img id="preview">
+                    <div id="ai-msg" style="font-size:0.85em; margin:10px 0; color: var(--text-light);">Ambil foto botol plastik untuk koin</div>
+                    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="verifyAI(event)">
+                    <label for="file-input" class="btn btn-primary" style="display:block; text-align:center; padding-top: 15px;">📸 Ambil Foto</label>
+                    <button class="btn" id="btn-redeem" style="background:#1b5e20; color:white; display:none;" onclick="redeem()">Klaim 1 Koin</button>
                 </div>
-                <button class="btn" id="btn-redeem" style="background:#1b5e20; color:white; display:none;" onclick="redeem()">✅ KLAIM 1 KOIN</button>
             </div>
         </div>
 
-        <div id="page-rank" style="display:none; padding:15px;">
-            <h3>🏆 Papan Peringkat</h3>
-            <table class="history-table"><tbody id="rank-body"></tbody></table>
+        <div id="page-leaderboard" class="action-section" style="display:none;">
+            <h3>🏆 Pahlawan Lingkungan</h3>
+            <table class="history-table"><tbody id="leaderboard-body"></tbody></table>
         </div>
 
-        <div id="page-history" style="display:none; padding:15px;">
+        <div id="page-logs" class="action-section" style="display:none;">
             <h3>📜 Riwayat Aktivitas</h3>
             <table class="history-table"><tbody id="log-body"></tbody></table>
         </div>
 
         <div class="bottom-nav">
-            <div class="nav-item active" id="n-home" onclick="showPage('home')">🏠<br>Home</div>
+            <div class="nav-item active" id="nav-home" onclick="showPage('home')">🏠<br>Home</div>
             <div class="nav-item" onclick="openGame()">🎡<br>Spin</div>
-            <div class="nav-item" id="n-rank" onclick="showPage('rank')">🏆<br>Rank</div>
-            <div class="nav-item" id="n-history" onclick="showPage('history')">📜<br>History</div>
+            <div class="nav-item" id="nav-leaderboard" onclick="showPage('leaderboard')">🏆<br>Rank</div>
+            <div class="nav-item" id="nav-logs" onclick="showPage('logs')">📜<br>History</div>
         </div>
     </div>
 
     <div id="game-overlay">
         <h2 style="color:var(--gold); margin:0;">ECO-SPIN</h2>
-        <small>Biaya 10 Koin</small>
-        <div id="wheel"></div>
-        <button class="btn" id="spin-btn" style="background:var(--gold); color:black; width:200px;" onclick="spin()">PUTAR</button>
-        <div class="prize-legend">
-            <div class="p-item"><div class="dot" style="background:#e53935;"></div> Zonk</div>
-            <div class="p-item"><div class="dot" style="background:#f06292;"></div> Rp 1.000</div>
-            <div class="p-item"><div class="dot" style="background:#9e9e9e;"></div> +2 Koin</div>
-            <div class="p-item"><div class="dot" style="background:#fb8c00;"></div> Rp 500</div>
-            <div class="p-item"><div class="dot" style="background:#8e24aa;"></div> JP 50 Koin</div>
-            <div class="p-item"><div class="dot" style="background:#0277bd;"></div> +20 Koin</div>
-            <div class="p-item"><div class="dot" style="background:#4caf50;"></div> Rp 100</div>
-            <div class="p-item"><div class="dot" style="background:#fbc02d;"></div> +5 Koin</div>
+        <small style="opacity:0.8; margin-bottom:15px;">Biaya: 10 Koin</small>
+
+        <div class="prize-list">
+            <div class="prize-item"><div class="dot" style="background:#e53935;"></div> Zonk</div>
+            <div class="prize-item"><div class="dot" style="background:#fbc02d;"></div> +5 Koin</div>
+            <div class="prize-item"><div class="dot" style="background:#4caf50;"></div> +Rp 100</div>
+            <div class="prize-item"><div class="dot" style="background:#0277bd;"></div> +20 Koin</div>
+            <div class="prize-item"><div class="dot" style="background:#8e24aa;"></div> JP 50 Koin</div>
+            <div class="prize-item"><div class="dot" style="background:#fb8c00;"></div> +Rp 500</div>
+            <div class="prize-item"><div class="dot" style="background:#9e9e9e;"></div> +2 Koin</div>
+            <div class="prize-item"><div class="dot" style="background:#f06292;"></div> RP 1.000</div>
         </div>
-        <button onclick="closeGame()" style="background:none; border:1px solid white; color:white; padding:8px 25px; border-radius:20px; margin-top:15px; cursor:pointer;">Kembali</button>
+
+        <div style="position:relative;">
+            <div style="position:absolute; top:-15px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent; border-top:20px solid white; z-index:10;"></div>
+            <div id="wheel"></div>
+        </div>
+
+        <button class="btn" id="spin-btn" style="background:var(--gold); color:black; width:200px; font-weight: bold;" onclick="spin()">PUTAR SEKARANG</button>
+        <button onclick="closeGame()" style="background:none; border:1px solid white; color:white; padding:8px 25px; border-radius:20px; cursor:pointer; margin-top:15px;">Kembali</button>
     </div>
 </div>
 
 <script>
     let users = JSON.parse(localStorage.getItem('ecoUsers')) || {};
+    let photoHashes = JSON.parse(localStorage.getItem('ecoHashes')) || [];
     let currentUser = null;
-    let authMode = 'login';
     let model = null;
+    let currentHash = null;
     let spinning = false;
 
-    function switchAuth(m) {
-        authMode = m;
-        document.getElementById('t-login').classList.toggle('active', m === 'login');
-        document.getElementById('t-reg').classList.toggle('active', m === 'register');
+    async function initAI() { model = await mobilenet.load(); }
+    initAI();
+
+    function switchAuth(t) {
+        document.getElementById('login-form').style.display = t === 'login' ? 'block' : 'none';
+        document.getElementById('register-form').style.display = t === 'register' ? 'block' : 'none';
+        document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', (i===0 && t==='login') || (i===1 && t==='register')));
     }
 
-    function handleAuth() {
-        const u = document.getElementById('u-input').value.trim();
-        const p = document.getElementById('p-input').value;
-        if(!u || !p) return alert("Data harus diisi!");
-        if(authMode === 'register') {
-            if(users[u]) return alert("User sudah terdaftar!");
-            users[u] = { pass: p, coins: 0, total: 0, money: 0, logs: [] };
-            save(); alert("Berhasil Terdaftar!"); switchAuth('login');
-        } else {
-            if(!users[u] || users[u].pass !== p) return alert("Login Gagal!");
-            currentUser = u;
-            document.getElementById('auth-container').style.display = 'none';
-            document.getElementById('app-container').style.display = 'block';
-            document.getElementById('display-name').innerText = currentUser;
-            refreshUI(); startScanner();
-        }
+    function showPage(p) {
+        ['home', 'leaderboard', 'logs'].forEach(s => document.getElementById('page-'+s).style.display = 'none');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById('page-'+p).style.display = 'block';
+        document.getElementById('nav-'+p).classList.add('active');
+        if(p === 'leaderboard') updateLeaderboard();
     }
 
-    async function startScanner() {
+    function register() {
+        const u = document.getElementById('reg-user').value.trim();
+        const p = document.getElementById('reg-pass').value;
+        if(!u || !p) return alert("Isi semua data!");
+        if(users[u]) return alert("Username sudah terdaftar!");
+        users[u] = { pass: p, coins: 0, total: 0, money: 0, logs: [] };
+        save(); alert("Berhasil Terdaftar!"); switchAuth('login');
+    }
+
+    function login() {
+        const u = document.getElementById('login-user').value.trim();
+        const p = document.getElementById('login-pass').value;
+        if(!users[u] || users[u].pass !== p) return alert("Login Salah!");
+        currentUser = u;
+        document.getElementById('auth-container').style.display = 'none';
+        document.getElementById('app-container').style.display = 'block';
+        document.getElementById('display-name').innerText = currentUser;
+        refreshUI();
+    }
+
+    async function verifyAI(e) {
+        const file = e.target.files[0];
+        if(!file) return;
         const msg = document.getElementById('ai-msg');
-        try {
-            msg.innerText = "Memuat AI...";
-            model = await mobilenet.load();
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            document.getElementById('webcam').srcObject = stream;
-            msg.innerText = "🔍 Mencari Botol...";
-            setInterval(async () => {
-                if(model && document.getElementById('webcam').readyState === 4) {
-                    const pred = await model.classify(document.getElementById('webcam'));
-                    const found = pred.some(p => p.className.toLowerCase().includes('bottle') && p.probability > 0.45);
-                    document.getElementById('btn-redeem').style.display = found ? "block" : "none";
-                }
-            }, 800);
-        } catch (e) { msg.innerText = "Kamera Error!"; }
+        const preview = document.getElementById('preview');
+        msg.innerText = "⏳ Menganalisis...";
+        
+        const reader = new FileReader();
+        reader.onload = async (f) => {
+            preview.src = f.target.result; preview.style.display = "block";
+            const hash = btoa(f.target.result.substring(0, 500));
+            if(photoHashes.includes(hash)) {
+                msg.innerText = "❌ Foto sudah pernah digunakan!";
+                return;
+            }
+            if(!model) { msg.innerText = "AI sedang dimuat..."; return; }
+            const pred = await model.classify(preview);
+            if(pred.some(p => p.className.toLowerCase().includes('bottle'))) {
+                msg.innerText = "✅ Botol Plastik Valid!";
+                currentHash = hash;
+                document.getElementById('btn-redeem').style.display = "block";
+            } else { msg.innerText = "❌ Bukan botol plastik!"; }
+        };
+        reader.readAsDataURL(file);
     }
 
     function redeem() {
-        users[currentUser].coins++;
-        users[currentUser].total++;
-        addLog("Scan Botol", "+1 Koin", "green");
+        const d = users[currentUser];
+        photoHashes.push(currentHash);
+        localStorage.setItem('ecoHashes', JSON.stringify(photoHashes));
+        d.coins++; d.total++;
+        addLog("Daur Ulang", "+1 Koin", "green");
+        document.getElementById('btn-redeem').style.display = "none";
+        document.getElementById('preview').style.display = "none";
+        document.getElementById('ai-msg').innerText = "Silahkan ambil foto botol";
         refreshUI();
     }
 
     function convertCoins() {
         const d = users[currentUser];
-        if(d.coins < 1) return alert("Koin tidak cukup!");
-        const untung = d.coins * 20;
-        d.money += untung;
-        addLog("Tukar Koin", "+Rp " + untung, "blue");
+        if(d.coins <= 0) return alert("Koin tidak cukup!");
+        const rp = d.coins * 20; 
+        d.money += rp;
+        const tempCoins = d.coins;
         d.coins = 0;
+        addLog("Tukar " + tempCoins + " Koin", "+Rp " + rp, "blue");
         refreshUI();
+    }
+
+    function updateLeaderboard() {
+        const body = document.getElementById('leaderboard-body');
+        const sorted = Object.keys(users).map(n => ({n, t: users[n].total})).sort((a,b) => b.t - a.t);
+        body.innerHTML = sorted.map((u, i) => `<tr><td style="width:10%;">#${i+1}</td><td>${u.n}</td><td style="text-align:right;">${u.t} Botol</td></tr>`).join('');
+    }
+
+    function openGame() { document.getElementById('game-overlay').style.display = 'flex'; }
+    function closeGame() { if(!spinning) document.getElementById('game-overlay').style.display = 'none'; }
+
+    function spin() {
+        const d = users[currentUser];
+        if(spinning || d.coins < 10) return alert("Butuh 10 Koin!");
+        
+        d.coins -= 10; 
+        spinning = true;
+        const extraDeg = Math.floor(Math.random() * 360);
+        const deg = 2160 + extraDeg; 
+        
+        const wheel = document.getElementById('wheel');
+        wheel.style.transform = `rotate(${deg}deg)`;
+        
+        setTimeout(() => {
+            spinning = false;
+            // Menghitung sisa derajat (0-359)
+            const res = 360 - (extraDeg % 360);
+            let prize = "", col = "";
+
+            if(res >= 0 && res < 45) { prize = "Zonk"; col = "red"; }
+            else if(res < 90) { d.money += 1000; prize = "SUPER RP 1.000"; col = "#f06292"; }
+            else if(res < 135) { d.coins += 2; prize = "+2 Koin"; col = "#9e9e9e"; }
+            else if(res < 180) { d.money += 500; prize = "+Rp 500"; col = "#fb8c00"; }
+            else if(res < 225) { d.coins += 50; prize = "JACKPOT 50 KOIN"; col = "#8e24aa"; }
+            else if(res < 270) { d.coins += 20; prize = "+20 Koin"; col = "#0277bd"; }
+            else if(res < 315) { d.money += 100; prize = "+Rp 100"; col = "green"; }
+            else { d.coins += 5; prize = "+5 Koin"; col = "orange"; }
+
+            addLog("Eco-Spin", prize, col);
+            refreshUI(); 
+            alert("Selamat! Kamu mendapatkan: " + prize);
+            wheel.style.transition = "none";
+            wheel.style.transform = "rotate(0deg)";
+            setTimeout(() => { wheel.style.transition = "transform 4s cubic-bezier(0.1, 0.7, 0.1, 1)"; }, 50);
+        }, 4000);
+    }
+
+    function refreshUI() {
+        if(!currentUser) return;
+        const d = users[currentUser];
+        document.getElementById('stat-coins').innerText = d.coins;
+        document.getElementById('stat-total').innerText = d.total;
+        document.getElementById('stat-money').innerText = "Rp " + d.money.toLocaleString('id-ID');
+        document.getElementById('log-body').innerHTML = d.logs.map(l => `<tr><td>${l.time}<br><small>${l.act}</small></td><td style="text-align:right; color:${l.col}"><b>${l.res}</b></td></tr>`).join('');
+        save();
     }
 
     function addLog(act, res, col) {
         const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
         users[currentUser].logs.unshift({time, act, res, col});
-        save();
     }
-
-    function spin() {
-        const d = users[currentUser];
-        if(spinning || d.coins < 10) return alert("Butuh 10 Koin!");
-        d.coins -= 10; spinning = true; refreshUI();
-        const extraDeg = Math.floor(Math.random() * 360);
-        const totalDeg = 2160 + extraDeg;
-        document.getElementById('wheel').style.transform = `rotate(${totalDeg}deg)`;
-        setTimeout(() => {
-            spinning = false;
-            const res = 360 - (extraDeg % 360);
-            let prize = "", col = "";
-            if(res < 45) { prize = "Zonk"; col = "red"; }
-            else if(res < 90) { d.money += 1000; prize = "Rp 1.000"; col = "#f06292"; }
-            else if(res < 135) { d.coins += 2; prize = "+2 Koin"; col = "#9e9e9e"; }
-            else if(res < 180) { d.money += 500; prize = "Rp 500"; col = "#fb8c00"; }
-            else if(res < 225) { d.coins += 50; prize = "50 Koin"; col = "#8e24aa"; }
-            else if(res < 270) { d.coins += 20; prize = "+20 Koin"; col = "#0277bd"; }
-            else if(res < 315) { d.money += 100; prize = "Rp 100"; col = "#4caf50"; }
-            else { d.coins += 5; prize = "+5 Koin"; col = "#fbc02d"; }
-            addLog("Eco-Spin", prize, col);
-            alert("Kamu dapat: " + prize);
-            refreshUI();
-        }, 4000);
-    }
-
-    function refreshUI() {
-        const d = users[currentUser];
-        document.getElementById('stat-money').innerText = "Rp " + d.money.toLocaleString('id-ID');
-        document.getElementById('stat-coins').innerText = d.coins;
-        document.getElementById('stat-total').innerText = d.total;
-        document.getElementById('log-body').innerHTML = d.logs.map(l => `<tr><td>${l.time}<br><small>${l.act}</small></td><td style="text-align:right; color:${l.col}"><b>${l.res}</b></td></tr>`).join('');
-        save();
-    }
-
-    function showPage(p) {
-        ['home', 'rank', 'history'].forEach(id => {
-            document.getElementById('page-'+id).style.display = (id === p) ? 'block' : 'none';
-            document.getElementById('n-'+id).classList.toggle('active', id === p);
-        });
-        if(p === 'rank') {
-            const sorted = Object.keys(users).map(n => ({n, t: users[n].total})).sort((a,b) => b.t - a.t);
-            document.getElementById('rank-body').innerHTML = sorted.map((u, i) => `<tr><td>#${i+1}</td><td>${u.n}</td><td style="text-align:right;">${u.t} Botol</td></tr>`).join('');
-        }
-    }
-
-    function openGame() { document.getElementById('game-overlay').style.display = 'flex'; }
-    function closeGame() { if(!spinning) document.getElementById('game-overlay').style.display = 'none'; }
     function save() { localStorage.setItem('ecoUsers', JSON.stringify(users)); }
 </script>
 </body>

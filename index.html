@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EchoTracker</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --accent: #43a047;
+            --bg: #f8f9fa;
+            --white: #ffffff;
+            --text-dark: #212121;
+            --text-light: #757575;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+            --gold: #fbc02d;
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; color: var(--text-dark); overflow-x: hidden; }
+
+        /* --- AUTH UI --- */
+        #auth-container { height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 30px; box-sizing: border-box; background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%); }
+        .auth-card { background: var(--white); padding: 25px; border-radius: 24px; box-shadow: var(--shadow); }
+        .auth-tabs { display: flex; margin-bottom: 20px; background: #f0f0f0; padding: 5px; border-radius: 10px; }
+        .tab { flex: 1; text-align: center; padding: 10px; border-radius: 8px; cursor: pointer; color: #777; transition: 0.3s; }
+        .tab.active { background: white; color: var(--primary); font-weight: bold; box-shadow: var(--shadow); }
+
+        /* --- APP MAIN UI --- */
+        #app-container { display: none; padding-bottom: 90px; }
+        .app-header { background: var(--white); padding: 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #eee; }
+        .wallet-card { background: linear-gradient(135deg, var(--primary), var(--accent)); margin: 20px; padding: 20px; border-radius: 20px; color: white; box-shadow: 0 8px 16px rgba(46, 125, 50, 0.2); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px; }
+        .stat-card { background: var(--white); padding: 15px; border-radius: 16px; text-align: center; box-shadow: var(--shadow); }
+        .stat-card span { font-size: 1.3em; font-weight: 800; color: var(--primary); display: block; }
+
+        /* Action UI */
+        .action-section { padding: 20px; }
+        .ai-box { background: var(--white); border-radius: 20px; padding: 20px; text-align: center; box-shadow: var(--shadow); border: 2px dashed #c8e6c9; }
+        .btn { border: none; padding: 15px; border-radius: 14px; cursor: pointer; width: 100%; font-size: 1em; font-weight: 600; margin: 10px 0; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        #preview { width: 100%; border-radius: 12px; margin-top: 10px; display: none; max-height: 150px; object-fit: contain; }
+
+        /* --- GAME OVERLAY --- */
+        #game-overlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; 
+            align-items: center; justify-content: flex-start;
+            color: white; padding: 40px 20px; box-sizing: border-box; overflow-y: auto; 
+        }
+        #wheel { 
+            width: 220px; height: 220px; border-radius: 50%; border: 5px solid white; margin: 20px 0;
+            transition: transform 3s cubic-bezier(0.1, 0.7, 0.1, 1);
+            background: conic-gradient(#e53935 0 72deg, #fbc02d 72deg 144deg, #4caf50 144deg 216deg, #0277bd 216deg 288deg, #8e24aa 288deg 360deg);
+        }
+        .prize-legend { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; width: 100%; max-width: 280px; font-size: 0.85em; margin-bottom: 20px; }
+        .prize-item { display: flex; align-items: center; margin-bottom: 6px; }
+        .color-dot { width: 10px; height: 10px; border-radius: 2px; margin-right: 10px; }
+
+        /* Navigation */
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: var(--white); display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid #eee; z-index: 100; }
+        .nav-item { text-align: center; font-size: 0.75em; color: var(--text-light); cursor: pointer; }
+        .nav-item.active { color: var(--primary); font-weight: bold; }
+
+        .history-table { width: 100%; background: white; border-radius: 15px; border-collapse: collapse; }
+        .history-table td { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <!-- AUTH -->
+    <div id="auth-container">
+        <div style="text-align:center; margin-bottom: 20px;">
+            <h1 style="color:var(--primary); margin:0;">EchoTracker</h1>
+            <p style="color:var(--text-light); margin:5px 0;">Daur Ulang Jadi Rupiah</p>
+        </div>
+        <div class="auth-card">
+            <div class="auth-tabs">
+                <div class="tab active" onclick="switchAuth('login')">Masuk</div>
+                <div class="tab" onclick="switchAuth('register')">Daftar</div>
+            </div>
+            <div id="login-form">
+                <input type="text" id="login-user" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:10px; box-sizing: border-box;" placeholder="Username">
+                <input type="password" id="login-pass" style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ddd; border-radius:10px; box-sizing: border-box;" placeholder="Password">
+                <button class="btn btn-primary" onclick="login()">Masuk</button>
+            </div>
+            <div id="register-form" style="display:none">
+                <input type="text" id="reg-user" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:10px; box-sizing: border-box;" placeholder="Username Baru">
+                <input type="password" id="reg-pass" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:10px; box-sizing: border-box;" placeholder="Password Baru">
+                <button class="btn btn-primary" onclick="register()">Daftar Akun</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-container">
+        <div class="app-header">
+            <b>Halo, <span id="display-name"></span></b>
+            <small onclick="location.reload()" style="color:red; cursor:pointer;">Logout</small>
+        </div>
+
+        <div id="page-home">
+            <div class="wallet-card">
+                <small>Saldo Dompet</small>
+                <div style="font-size:1.8em; font-weight:800;" id="stat-money">Rp 0</div>
+                <p style="font-size: 0.7em; margin: 5px 0 0 0; opacity: 0.9;">*Kurs: 1 Koin = Rp 20</p>
+                <button onclick="convertCoins()" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:8px; border-radius:8px; margin-top:10px; width:100%; cursor:pointer; font-weight:bold;">Tukar Koin Ke Saldo</button>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">Koin<span id="stat-coins">0</span></div>
+                <div class="stat-card">Total Botol<span id="stat-total">0</span></div>
+            </div>
+            <div class="action-section">
+                <div class="ai-box">
+                    <b>Cek Botol Plastik</b>
+                    <img id="preview">
+                    <div id="ai-msg" style="font-size:0.8em; margin:10px 0;">Silahkan ambil foto botol</div>
+                    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="verifyAI(event)">
+                    <label for="file-input" class="btn btn-primary" style="display:block; text-align:center;">📸 Ambil Foto</label>
+                    <button class="btn" id="btn-redeem" style="background:green; color:white; display:none;" onclick="redeem()">Klaim 1 Koin</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-leaderboard" class="action-section" style="display:none;">
+            <h3>🏆 Pahlawan Lingkungan</h3>
+            <table class="history-table"><tbody id="leaderboard-body"></tbody></table>
+        </div>
+
+        <div id="page-logs" class="action-section" style="display:none;">
+            <h3>📜 Riwayat Aktivitas</h3>
+            <table class="history-table"><tbody id="log-body"></tbody></table>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" id="nav-home" onclick="showPage('home')">🏠<br>Home</div>
+            <div class="nav-item" onclick="openGame()">🎡<br>Spin</div>
+            <div class="nav-item" id="nav-leaderboard" onclick="showPage('leaderboard')">🏆<br>Peringkat</div>
+            <div class="nav-item" id="nav-logs" onclick="showPage('logs')">📜<br>Riwayat</div>
+        </div>
+    </div>
+
+    <!-- GAME OVERLAY -->
+    <div id="game-overlay">
+        <h2 style="color:var(--gold); margin:0;">ECO-SPIN</h2>
+        <small style="opacity:0.7;">Gunakan 10 Koin</small>
+
+        <div style="position:relative;">
+            <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent; border-top:20px solid white; z-index:10;"></div>
+            <div id="wheel"></div>
+        </div>
+
+        <div class="prize-legend">
+            <div class="prize-item"><div class="color-dot" style="background:#e53935;"></div> Merah: Zonk</div>
+            <div class="prize-item"><div class="color-dot" style="background:#fbc02d;"></div> Kuning: +5 Koin</div>
+            <div class="prize-item"><div class="color-dot" style="background:#4caf50;"></div> Hijau: +Rp 100 (Saldo)</div>
+            <div class="prize-item"><div class="color-dot" style="background:#0277bd;"></div> Biru: +20 Koin</div>
+            <div class="prize-item"><div class="color-dot" style="background:#8e24aa;"></div> Ungu: JACKPOT +50 Koin</div>
+        </div>
+
+        <button class="btn" id="spin-btn" style="background:var(--gold); color:black; width:220px;" onclick="spin()">PUTAR SEKARANG</button>
+        <button onclick="closeGame()" style="background:none; border:1px solid white; color:white; padding:10px 30px; border-radius:20px; cursor:pointer; margin-top:10px;">⬅ Kembali Ke Beranda</button>
+    </div>
+
+    <script>
+        let users = JSON.parse(localStorage.getItem('ecoUsers')) || {};
+        let photoHashes = JSON.parse(localStorage.getItem('ecoHashes')) || [];
+        let currentUser = null;
+        let model = null;
+        let currentHash = null;
+        let spinning = false;
+
+        async function initAI() { model = await mobilenet.load(); }
+        initAI();
+
+        function switchAuth(t) {
+            document.getElementById('login-form').style.display = t === 'login' ? 'block' : 'none';
+            document.getElementById('register-form').style.display = t === 'register' ? 'block' : 'none';
+            document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', (i===0 && t==='login') || (i===1 && t==='register')));
+        }
+
+        function showPage(p) {
+            ['home', 'leaderboard', 'logs'].forEach(s => document.getElementById('page-'+s).style.display = 'none');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('page-'+p).style.display = 'block';
+            document.getElementById('nav-'+p).classList.add('active');
+            if(p === 'leaderboard') updateLeaderboard();
+        }
+
+        function register() {
+            const u = document.getElementById('reg-user').value.trim();
+            const p = document.getElementById('reg-pass').value;
+            if(!u || !p) return alert("Isi semua data!");
+            if(users[u]) return alert("User sudah ada!");
+            users[u] = { pass: p, coins: 0, total: 0, money: 0, logs: [] };
+            save(); alert("Pendaftaran Berhasil!"); switchAuth('login');
+        }
+
+        function login() {
+            const u = document.getElementById('login-user').value.trim();
+            const p = document.getElementById('login-pass').value;
+            if(!users[u] || users[u].pass !== p) return alert("Login Gagal!");
+            currentUser = u;
+            document.getElementById('auth-container').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            document.getElementById('display-name').innerText = currentUser;
+            refreshUI();
+        }
+
+        async function verifyAI(e) {
+            const file = e.target.files[0];
+            const msg = document.getElementById('ai-msg');
+            const preview = document.getElementById('preview');
+            msg.innerText = "⏳ Menganalisis...";
+            const reader = new FileReader();
+            reader.onload = async (f) => {
+                preview.src = f.target.result; preview.style.display = "block";
+                const hash = btoa(f.target.result.substring(0, 500));
+                if(photoHashes.includes(hash)) return msg.innerText = "❌ Foto sudah pernah dipakai!";
+                const pred = await model.classify(preview);
+                if(pred.some(p => p.className.toLowerCase().includes('bottle'))) {
+                    msg.innerText = "✅ Botol Plastik Terdeteksi!"; currentHash = hash;
+                    document.getElementById('btn-redeem').style.display = "block";
+                } else { msg.innerText = "❌ Ini bukan botol plastik!"; }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function redeem() {
+            const d = users[currentUser];
+            photoHashes.push(currentHash);
+            localStorage.setItem('ecoHashes', JSON.stringify(photoHashes));
+            d.coins++; d.total++;
+            addLog("Daur Ulang", "+1 Koin", "green");
+            document.getElementById('btn-redeem').style.display = "none";
+            document.getElementById('preview').style.display = "none";
+            refreshUI();
+        }
+
+        function convertCoins() {
+            const d = users[currentUser];
+            if(d.coins <= 0) return alert("Koin kamu tidak cukup!");
+            const rp = d.coins * 20; 
+            d.money += rp;
+            const tempCoins = d.coins;
+            d.coins = 0;
+            addLog("Tukar " + tempCoins + " Koin", "+Rp " + rp, "blue");
+            refreshUI();
+        }
+
+        function updateLeaderboard() {
+            const body = document.getElementById('leaderboard-body');
+            const sorted = Object.keys(users).map(n => ({n, t: users[n].total})).sort((a,b) => b.t - a.t);
+            body.innerHTML = sorted.map((u, i) => `<tr><td>${i+1}</td><td>${u.n}</td><td>${u.t} Botol</td></tr>`).join('');
+        }
+
+        function openGame() { document.getElementById('game-overlay').style.display = 'flex'; }
+        function closeGame() { if(!spinning) document.getElementById('game-overlay').style.display = 'none'; }
+
+        function spin() {
+            const d = users[currentUser];
+            if(spinning || d.coins < 10) return alert("Butuh 10 Koin untuk sekali putar!");
+            d.coins -= 10; spinning = true;
+            const deg = Math.floor(Math.random() * 360) + 1800;
+            document.getElementById('wheel').style.transform = `rotate(${deg}deg)`;
+            setTimeout(() => {
+                spinning = false;
+                const res = deg % 360;
+                let prize = "", col = "";
+                if(res < 72) { prize = "Zonk"; col = "red"; }
+                else if(res < 144) { d.coins += 5; prize = "+5 Koin"; col = "orange"; }
+                // --- UPDATE HADIAH HIJAU ---
+                else if(res < 216) { d.money += 100; prize = "+Rp 100"; col = "green"; } 
+                else if(res < 288) { d.coins += 20; prize = "+20 Koin"; col = "blue"; }
+                else { d.coins += 50; prize = "JACKPOT +50 Koin"; col = "purple"; }
+                addLog("Eco-Spin", prize, col);
+                refreshUI(); alert("Selamat! Kamu mendapatkan: " + prize);
+                document.getElementById('wheel').style.transform = "rotate(0deg)";
+            }, 3500);
+        }
+
+        function refreshUI() {
+            const d = users[currentUser];
+            document.getElementById('stat-coins').innerText = d.coins;
+            document.getElementById('stat-total').innerText = d.total;
+            document.getElementById('stat-money').innerText = "Rp " + d.money.toLocaleString('id-ID');
+            document.getElementById('log-body').innerHTML = d.logs.map(l => `<tr><td>${l.time}<br>${l.act}</td><td style="color:${l.col}"><b>${l.res}</b></td></tr>`).join('');
+            save();
+        }
+
+        function addLog(act, res, col) {
+            const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            users[currentUser].logs.unshift({time, act, res, col});
+        }
+        function save() { localStorage.setItem('ecoUsers', JSON.stringify(users)); }
+    </script>
+</body>
+</html>
